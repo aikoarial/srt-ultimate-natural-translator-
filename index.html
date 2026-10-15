@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRT Ultimate Natural Translator</title>
+    <style>
+        body { font-family: sans-serif; background-color: #121212; color: #fff; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        h2 { text-align: center; color: #4f46e5; font-size: 22px; }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input, textarea, button { width: 100%; margin-top: 5px; padding: 12px; border-radius: 5px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 16px; }
+        button { background: #4f46e5; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        button:hover { background: #4338ca; }
+        textarea { height: 180px; resize: vertical; }
+        .note { font-size: 12px; color: #9ca3af; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>SRT Ultimate Natural Translator</h2>
+    
+    <label for="srtFile">Upload SRT File (EN/KO):</label>
+    <input type="file" id="srtFile" accept=".srt">
+
+    <button onclick="translateSRT()">လူပြောစကားပုံစံဖြင့် မြန်မာဘာသာသို့ အမြန်ပြန်မည်</button>
+
+    <label for="output">Translated Text (Natural Spoken Myanmar):</label>
+    <textarea id="output" readonly placeholder="သဘာဝကျသော ဘာသာပြန်စာသားများ ဤနေရာတွင် ပေါ်လာပါမည်..."></textarea>
+    
+    <button id="downloadBtn" style="display:none; background: #10b981;" onclick="downloadSRT()">Download SRT</button>
+</div>
+
+<script>
+    let fileContent = "";
+
+    document.getElementById('srtFile').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                fileContent = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+    });
+
+    // AI ဆန်ဆန် တိုက်ရိုက်ဘာသာပြန်ချက်များကို မြန်မာလူမျိုးများ လက်တွေ့ပြောသော စကားပုံစံသို့ အသေးစိတ်ပြောင်းလဲခြင်း
+    function makeNaturalSpoken(text) {
+        let natural = text
+            // စာကြောင်းအဆုံးရှိ ရေးထုံးစံ "။" နှင့် "." များကို လုံးဝဖယ်ရှားခြင်း
+            .replace(/။/g, '')
+            .replace(/\.$/, '')
+            // စာပေဆန်သော / စက်ဆန်သော ဝေါဟာရများကို လူပြောစကားပုံစံသို့ အစားထိုးခြင်း
+            .replace(/ဖြစ်ပါသည်/g, 'တယ်')
+            .replace(/ဖြစ်ပါတယ်/g, 'တယ်')
+            .replace(/ပါသည်/g, 'တယ်')
+            .replace(/ပါတယ်/g, 'တယ်')
+            .replace(/သွားသည်/g, 'သွားတယ်')
+            .replace(/လာသည်/g, 'လာတယ်')
+            .replace(/နေသည်/g, 'နေတယ်')
+            .replace(/ရှိသည်/g, 'ရှိတယ်')
+            .replace(/ကောင်းသည်/g, 'ကောင်းတယ်')
+            .replace(/လုပ်သည်/g, 'လုပ်တယ်')
+            .replace(/ကျေးဇူးတင်ပါတယ်/g, 'ကျေးဇူးတင်ပါတယ်')
+            .replace(/မင်္ဂလာပါ/g, 'မင်္ဂလာပါ')
+            .trim();
+        
+        return natural;
+    }
+
+    async function translateChunk(texts) {
+        try {
+            const combinedText = texts.join('\n[--SPLIT--]\n');
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=my&dt=t&q=${encodeURIComponent(combinedText)}`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data && data[0]) {
+                let translatedFull = data[0].map(item => item[0]).join('');
+                let translatedLines = translatedFull.split(/\[\s*--\s*SPLIT\s*--\s*\]/);
+                
+                if (translatedLines.length !== texts.length) {
+                    return texts; 
+                }
+
+                return translatedLines.map(t => makeNaturalSpoken(t));
+            }
+            return texts;
+        } catch (e) {
+            return texts;
+        }
+    }
+
+    async function translateSRT() {
+        const outputArea = document.getElementById('output');
+        if (!fileContent) {
+            alert("ကျေးဇူးပြု၍ SRT ဖိုင်တစ်ခုကို ဦးစွာတင်ပါ။");
+            return;
+        }
+
+        outputArea.value = "လူပြောစကားပုံစံဖြင့် သဘာဝကျကျ အမြန်ဘာသာပြန်ဆိုနေပါသည်၊ ခေတ္တစောင့်ဆိုင်းပါ...";
+
+        try {
+            const lines = fileContent.replace(/\r\n/g, '\n').split('\n');
+            let textIndices = [];
+            let textLines = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i];
+                if (!line.includes('-->') && !(/^\d+$/.test(line.trim())) && line.trim() !== '') {
+                    textIndices.push(i);
+                    textLines.push(line);
+                }
+            }
+
+            // တစ်ခါပို့လျှင် စာကြောင်းရေ ၂၀ နှုန်းဖြင့် အုပ်စုလိုက် အမြန်ဆုံး ပို့ဆောင်မည်
+            const chunkSize = 20;
+            for (let i = 0; i < textLines.length; i += chunkSize) {
+                let chunk = textLines.slice(i, i + chunkSize);
+                let translatedChunk = await translateChunk(chunk);
+
+                for (let j = 0; j < chunk.length; j++) {
+                    let originalIndex = textIndices[i + j];
+                    lines[originalIndex] = translatedChunk[j] || makeNaturalSpoken(chunk[j]);
+                }
+                
+                outputArea.value = `ဘာသာပြန်ဆိုနေသည်... (${Math.min(i + chunkSize, textLines.length)} / ${textLines.length} ပြီးပါပြီ)`;
+            }
+
+            outputArea.value = lines.join('\n');
+            document.getElementById('downloadBtn').style.display = 'block';
+        } catch (error) {
+            console.error(error);
+            outputArea.value = "ဘာသာပြန်ဆိုရာတွင် အမှားအယွင်း ရှိသွားပါသည်။";
+        }
+    }
+
+    function downloadSRT() {
+        const text = document.getElementById('output').value;
+        const blob = new Blob([text], { type: 'text/srt;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ultimate_natural_translated.srt';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+</script>
+
+</body>
+</html>
